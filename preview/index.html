@@ -431,10 +431,14 @@ footer p{font:400 16px/1.4 var(--serif);margin:14px 0 0;opacity:.92}
     if(!(D.photoKey&&D.photoFolder)){ PH=[]; phBuild(); return; }
     phMsg(t('photosLoading')); var all=[];
     (function page(tok){
-      var u='https://www.googleapis.com/drive/v3/files?pageSize=1000&orderBy=name&fields=nextPageToken,files(id)&key='+encodeURIComponent(D.photoKey)+
+      var u='https://www.googleapis.com/drive/v3/files?pageSize=1000&orderBy=name&fields=nextPageToken,files(id,createdTime,imageMediaMetadata/time)&key='+encodeURIComponent(D.photoKey)+
         '&q='+encodeURIComponent("'"+D.photoFolder+"' in parents and mimeType contains 'image/' and trashed=false")+(tok?'&pageToken='+encodeURIComponent(tok):'');
       fetch(u).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(function(j){
-        all=all.concat(j.files||[]); if(j.nextPageToken) page(j.nextPageToken); else { PH=all; phBuild(); }
+        all=all.concat(j.files||[]); if(j.nextPageToken) page(j.nextPageToken); else {
+          // oldest to newest by date taken (camera time), falling back to upload time
+          var key=function(f){ var m=f.imageMediaMetadata&&f.imageMediaMetadata.time; return m ? m.replace(/[^0-9]/g,'') : (f.createdTime||'').replace(/[^0-9]/g,'').slice(0,14); };
+          all.sort(function(a,b){ var x=key(a), y=key(b); return x<y?-1:x>y?1:0; });
+          PH=all; phBuild(); }
       }).catch(function(){ PH=null; phMsg(t('photosFail'),true); });
     })();
   }
