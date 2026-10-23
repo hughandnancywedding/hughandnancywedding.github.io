@@ -316,6 +316,29 @@ footer p{font:400 16px/1.4 var(--serif);margin:14px 0 0;opacity:.92}
   if(D.map){ document.getElementById('mapbtn').hidden=false; document.getElementById('mapimg').src=D.map; }
   if(D.menu && D.menu.courses && D.menu.courses.length){ document.getElementById('menubtn').hidden=false; }
 
+  // "Welcome" line spans from the middle of "Hugh Dang" to the middle of "Nancy Lee" in the names art
+  var NAME_L=0.183, NAME_R=0.802;
+  function fitWelcome(){
+    var el=document.querySelector('.welcome'), img=document.getElementById('names'); if(!el||!img||!img.clientWidth) return;
+    var text=T[lang].welcome, target=img.clientWidth*(NAME_R-NAME_L);
+    var meas=document.createElement('span'); meas.style.cssText='position:absolute;visibility:hidden;white-space:nowrap;font:'+getComputedStyle(el).fontStyle+' 400 100px '+getComputedStyle(el).fontFamily;
+    document.body.appendChild(meas);
+    function w(t){ meas.textContent=t; return meas.getBoundingClientRect().width; }
+    var lines=[text], size=100*target/w(text);
+    if(size<20){ // too small on one line: split into two balanced lines
+      var words=text.split(' '), best=null;
+      for(var i=1;i<words.length;i++){ var a=words.slice(0,i).join(' '), b=words.slice(i).join(' '), m=Math.max(w(a),w(b)); if(!best||m<best.m) best={a:a,b:b,m:m}; }
+      lines=[best.a,best.b]; size=100*target/best.m;
+    }
+    document.body.removeChild(meas);
+    el.innerHTML=lines.map(function(l){ return '<span style="display:block;white-space:nowrap">'+esc(l)+'</span>'; }).join('');
+    el.style.fontSize=size.toFixed(1)+'px';
+    document.getElementById('date').style.fontSize=Math.min(17,size*0.82).toFixed(1)+'px'; // date always smaller than welcome
+    el.style.transform='translateX('+(((NAME_L+NAME_R)/2-0.5)*img.clientWidth).toFixed(1)+'px)';
+  }
+  window.addEventListener('resize', fitWelcome);
+  document.getElementById('names').addEventListener('load', fitWelcome);
+  if(document.fonts&&document.fonts.ready) document.fonts.ready.then(fitWelcome);
   function applyLang(){
     document.documentElement.lang = lang;
     document.querySelectorAll('[data-t]').forEach(function(el){ el.textContent = T[lang][el.getAttribute('data-t')]; });
@@ -323,6 +346,7 @@ footer p{font:400 16px/1.4 var(--serif);margin:14px 0 0;opacity:.92}
     document.getElementById('q').placeholder = T[lang].ph;
     document.getElementById('date').textContent = lang==='vi' ? D.dateVi : D.dateEn;
     document.getElementById('mapimg').alt = T[lang].mapTitle;
+    fitWelcome();
     setMapTitle(); setZoomLabel(); renderMenu(); render();
   }
 
