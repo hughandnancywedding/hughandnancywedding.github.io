@@ -520,17 +520,18 @@ footer p{font:400 16px/1.4 var(--serif);margin:14px 0 0;opacity:.92}
   });
   function b64(blob){ return new Promise(function(res,rej){ var r=new FileReader(); r.onload=function(){ res(String(r.result).split(',')[1]||''); }; r.onerror=rej; r.readAsDataURL(blob); }); }
   function api(o){ return fetch(D.uploadUrl,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(o)}).then(function(r){ return r.json(); }); }
+  var upErr='';
   var CHUNK=16*1024*1024; // multiple of 256 KB, as Google Drive requires
   // any file size: start a Drive upload session, then send the file in 16 MB pieces (each retried up to 3 times)
   function sendOne(f,guest,onPart){
     if(D.uploadUrl==='demo') return new Promise(function(r){ setTimeout(function(){ onPart(1); r(true); },400); });
     var total=f.size||0;
     return api({action:'start',name:f.name||'photo.jpg',type:f.type||'image/jpeg',size:total,guest:guest}).then(function(j){
-      if(!j||!j.ok||!j.session) throw 0;
+      if(!j||!j.ok||!j.session){ upErr=upErr||(j&&j.error)||'no session'; throw 0; }
       var session=j.session;
       function sendPiece(off,len,tries){
         return b64(f.slice(off,off+len)).then(function(data){ return api({action:'chunk',session:session,offset:off,total:total,b64:data}); })
-          .then(function(r){ if(!r||!r.ok) throw 0; return r; })
+          .then(function(r){ if(!r||!r.ok){ upErr=upErr||(r&&r.error)||'chunk refused'; throw 0; } return r; })
           .catch(function(){ if(tries<3) return new Promise(function(z){ setTimeout(z,1500*(tries+1)); }).then(function(){ return sendPiece(off,len,tries+1); }); throw 0; });
       }
       function piece(off){
@@ -538,15 +539,15 @@ footer p{font:400 16px/1.4 var(--serif);margin:14px 0 0;opacity:.92}
         return sendPiece(off,len,0).then(function(r){ var next=off+len; onPart(total?next/total:1); if(r.done||next>=total) return true; return piece(next); });
       }
       return piece(0);
-    }).catch(function(){ return false; });
+    }).catch(function(e){ if(e&&e.message) upErr=upErr||e.message; return false; });
   }
   document.getElementById('upGo').addEventListener('click', function(){
     if(upBusy||!upQueue.length) return; upBusy=true; upSetSel();
-    var list=upQueue.slice(), n=list.length, ok=0, failed=[], guest=document.getElementById('upName').value.trim();
+    upErr=''; var list=upQueue.slice(), n=list.length, ok=0, failed=[], guest=document.getElementById('upName').value.trim();
     var bar=document.getElementById('upBar'), stat=document.getElementById('upStat'); bar.style.display='block';
     (function next(i){
       if(i>=n){ upBusy=false; upQueue=failed; bar.style.display='none'; bar.firstChild.style.width='0';
-        stat.textContent = (failed.length ? fmt('upSome',{ok:ok,bad:failed.length}) : fmt('upDone',{n:ok}))+(D.uploadUrl==='demo'?' (Preview test only: nothing was saved.)':''); upSetSel(); return; }
+        stat.textContent = (failed.length ? fmt('upSome',{ok:ok,bad:failed.length})+(upErr?' ['+upErr.slice(0,160)+']':'') : fmt('upDone',{n:ok}))+(D.uploadUrl==='demo'?' (Preview test only: nothing was saved.)':''); upSetSel(); return; }
       stat.textContent=fmt('upNow',{i:i+1,n:n}); bar.firstChild.style.width=Math.round(i/n*100)+'%';
       sendOne(list[i],guest,function(frac){ bar.firstChild.style.width=Math.round((i+Math.min(1,frac))/n*100)+'%'; }).then(function(good){ if(good) ok++; else failed.push(list[i]); bar.firstChild.style.width=Math.round((i+1)/n*100)+'%'; next(i+1); });
     })(0);
